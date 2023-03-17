@@ -2,18 +2,24 @@ import cv2
 import numpy as np
 import open3d as o3d
 import matplotlib.pyplot as plt
+from scipy.sparse import coo_matrix
+from scipy.sparse.linalg import lsqr
 
 image_row = 120
 image_col = 120
 
 def imgRead_recursive(folder):
+    global image_row
+    global image_col
     n = 1
     file = "pic"
     extension = ".bmp"
-
     I = []
 
-    while cv2.imread(folder + file + str(n) + extension) is not None:
+    img_gray = cv2.imread(folder + file + str(n) + extension, cv2.IMREAD_GRAYSCALE)
+    image_row, image_col = img_gray.shape
+
+    while cv2.imread(folder + file + str(n) + extension, cv2.IMREAD_GRAYSCALE) is not None:
         img_gray = cv2.imread(folder + file + str(n) + extension, cv2.IMREAD_GRAYSCALE)
         I.append(np.array(img_gray))
         n = n + 1
@@ -84,7 +90,7 @@ def depth_visualization(D):
 # Z is the depth map which contains "only the z value" of all pixels (size : "image width" * "image height")
 def save_ply(Z,filepath):
     Z_map = np.reshape(Z, (image_row,image_col)).copy()
-    data = np.zeros((image_row*image_col,3),dtype=np.float32)
+    data = np.zeros((image_row*image_col,3),dtype=np.int16)
     # let all point float on a base plane 
     baseline_val = np.min(Z_map)
     Z_map[np.where(Z_map == 0)] = baseline_val
@@ -104,14 +110,6 @@ def show_ply(filepath):
     pcd = o3d.io.read_point_cloud(filepath)
     o3d.visualization.draw_geometries([pcd])
 
-# read the .bmp file
-def read_bmp(filepath):
-    global image_row
-    global image_col
-    image = cv2.imread(filepath,cv2.IMREAD_GRAYSCALE)
-    image_row , image_col = image.shape
-    return image
-
 def normal_estimation(I, L):
     
     L_psinv = np.linalg.inv(L.T@L)@L.T
@@ -126,43 +124,45 @@ def normal_estimation(I, L):
     return N
 
 def surface_reconstruction(N):
-    row = N.shape[0]
-    col = N.shape[1]
-    S = row*col
-    M = np.zeros((2*S, 2*S))
-    V = np.zeros((2*S, 1))
-    for i in range(2*S):
-        for j in range(2*S):
-            if i == j:
-                M[i][j] = -1
-                if j+1 < 2*S:
-                   M[i][j+1] = 1
-    M[S][S+1] = 0
+    S = image_row*image_col
+    Mx = np.zeros((S, S), dtype=np.int8)
+    My = np.zeros((S, S), dtype=np.int8)
+    V = np.zeros((2*S, 1), dtype = np.float32)
+
+    nx, ny, nz = N.reshape((S, 3)).T
 
     n = 0
-    for i in range(row):
-        for j in range(col):
-            if N[i][j][2] != 0:
-                V[n] = -N[i][j][0]/N[i][j][2]
-                V[S + n] = -N[i][j][1]/N[i][j][2]
-                n = n + 1
+    for i in range (S):
+        if nz[i] != 0:
+            V[n] = -nx[i]/nz[i]
+            V[n+S] = -ny[i]/nz[i]
+        n = n+1
 
-    #z = np.linalg.inv(M.T@M)@M.T@V
-    z = np.linalg.inv(M)@V
-    print(z)
+    for i in range(image_row):
+        for j in range(image_col-1):
+            k = i*image_col+j
+            Mx[k, k] = -1
+            Mx[k, k+1] = 1
 
+    for i in range(image_row-1):
+        for j in range(image_col):
+            k = i*image_col+j
+            My[k, k] = -1
+            My[k, k+image_col] = 1
+
+    M = np.vstack((Mx, My))
+    M = coo_matrix(M).tocsr()
+    z = lsqr(M, V, damp=0.1)[0]
+
+    return z
 
 if __name__ == '__main__':
-
-    [I, L] = readImg_n_lightVec("test/bunny/")
-    N = normal_estimation(I, L)
-    normal_visualization(N)
-    surface_reconstruction(N)
 
     [I, L] = readImg_n_lightVec("test/star/")
     N = normal_estimation(I, L)
     normal_visualization(N)
-    #surface_reconstruction(N)
+    z = surface_reconstruction(N)
+    depth_visualization(z)
     '''
 
     depth_visualization()
