@@ -158,7 +158,7 @@ def surface_reconstruction(N):
 
 if __name__ == '__main__':
 
-    [I, L] = readImg_n_lightVec("test/star/")
+    [I, L] = readImg_n_lightVec("test/bunny/")
     N = normal_estimation(I, L)
     normal_visualization(N)
     z = surface_reconstruction(N)
