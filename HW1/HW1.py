@@ -138,40 +138,7 @@ def CreateMask(normal_map):
     map_1D = np.reshape(np.sum(normal_map, axis = 1), ((image_row,image_col))).copy()
     mask = np.where(map_1D != 0, 1, 0)
     return mask
-'''
-def surface_reconstruction(N):
-    S = image_row*image_col
-    Mx = np.zeros((S, S), dtype=np.int8)
-    My = np.zeros((S, S), dtype=np.int8)
-    V = np.zeros((2*S, 1), dtype = np.float32)
 
-    nx, ny, nz = N.reshape((S, 3)).T
-
-    n = 0
-    for i in range (S):
-        if nz[i] != 0:
-            V[n] = -nx[i]/nz[i]
-            V[n+S] = -ny[i]/nz[i]
-        n = n+1
-
-    for i in range(image_row):
-        for j in range(image_col-1):
-            k = i*image_col+j
-            Mx[k, k] = -1
-            Mx[k, k+1] = 1
-
-    for i in range(image_row-1):
-        for j in range(image_col):
-            k = i*image_col+j
-            My[k, k] = -1
-            My[k, k+image_col] = 1
-
-    M = np.vstack((Mx, My))
-    M = coo_matrix(M).tocsr()
-    z = lsqr(M, V, damp=0.1)[0]
-
-    return z
-'''
 def depth_map_construction(normal_map, mask):
     normal_map = np.copy(np.reshape(normal_map, (image_row, image_col, 3)))
     [Y, X] = np.where(mask != 0)
