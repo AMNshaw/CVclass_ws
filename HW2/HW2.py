@@ -22,53 +22,51 @@ def img_to_gray(img):
     img_gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
     return img_gray
 
-def img_read_recursive(folder):
-    directory = 'baseline'
-    img_list = []
-    img_files = []
-    for filename in os.listdir(directory):
-        if filename.endswith('.jpg'):
-            img_files.append(os.path.join(directory, filename))
-
-    for img_file in img_files:
-        img, img_gray = read_img(img_file)
-        img_list.append(img_gray)
-
-    return img_list
 
 def SIFT_detection(img_list):
     SIFT_detector = cv2.SIFT_create()
+    kp, des = SIFT_detector.detectAndCompute(img, None)
+    return des, kp
 
-    des_list = []
-    kp_list = []
-    for img in img_list:
-        kp, des = SIFT_detector.detectAndCompute(img, None)
-        des_list.append(des)
-        kp_list.append(kp)
-
-    return des_list, kp_list
-
-def featureMatching(img1, img2, des1, des2, kp1, kp2):
+def featureMatching(des1, kp1, des2, kp2):
     matches_1to2 = []
     matches_2to1 = []
-    best_match_kp1 = []
-    best_match_kp2 = []
+    best_match = []
 
     for i in range(len(des1)):
         distances = [euclidean_distance(des1[i], des2[j]) for j in range(len(des2))]
         sorted_indices = np.argsort(distances)
-        best_match_index = sorted_indices[0]
-        second_best_match_index = sorted_indices[1]
-        if distances[best_match_index] < 0.75 * distances[second_best_match_index]:
+        first_nearest = sorted_indices[0]
+        second_nearest = sorted_indices[1]
+
+        if distances[first_nearest] < 0.75 * distances[second_nearest]:
             matches_1to2.append(i)
-            matches_2to1.append(best_match_index)
-            best_match_kp1.append(kp1[i].pt)
-            best_match_kp2.append(kp2[best_match_index].pt)
+            matches_2to1.append(first_nearest)
+            best_match.append(list(kp1[i].pt + kp2[first_nearest].pt))
 
-    img3 = cv2.drawMatches(img1, kp1, img2, kp2, 
-                      [(matches_1to2[i], matches_2to1[i]) for i in range(len(matches_1to2))], None)
+    return best_match
 
-    return matches_1to2, matches_2to1
+def Homography(match_pairs):
+    rows = []
+    for i in range(matches.shape[0]):
+        p1 = np.append(matches[i][0:2], 1)
+        p2 = np.append(matches[i][2:4], 1)
+        row1 = [0, 0, 0, p1[0], p1[1], p1[2], -p2[1]*p1[0], -p2[1]*p1[1], -p2[1]*p1[2]]
+        row2 = [p1[0], p1[1], p1[2], 0, 0, 0, -p2[0]*p1[0], -p2[0]*p1[1], -p2[0]*p1[2]]
+        rows.append(row1)
+        rows.append(row2)
+    rows = np.array(rows)
+    U, s, V = np.linalg.svd(rows)
+    H = V[-1].reshape(3, 3)
+    H = H/H[2, 2] 
+    
+    return H
+
+def Randompoints(matches, k=4):
+    idx = random.sample(range(len(matches)), k)
+    point = [matches[i] for i in idx ]
+    
+    return np.array(point)
 
 # create a window to show the image
 # It will show all the windows after you call im_show()
@@ -87,10 +85,12 @@ def euclidean_distance(x1, x2):
 
 if __name__ == '__main__':
 
-    img_list = img_read_recursive("baseline/")
-    des_list, kp_list = SIFT_detection(img_list)
+    img1, img_gray1 = read_img('baseline/m1');
+    img2, img_gray2 = read_img('baseline/m2');
+    des1, kp1 = SIFT_detection(img_gray1)
+    des2, kp2 = SIFT_detection(img_gray2)
 
-    matches_1to2, matches_2to1 = featureMatching(img_list[0], img_list[1], des_list[0], des_list[1], kp_list[0], kp_list[1])
+    best_match = featureMatching(des1, kp1, des2, kp2)
 
     """
     # Draw matches
